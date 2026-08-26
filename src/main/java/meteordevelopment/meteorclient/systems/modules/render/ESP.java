@@ -87,6 +87,23 @@ public class ESP extends Module {
         .build()
     );
 
+    private final Setting<Boolean> ignoreDistance = sgGeneral.add(new BoolSetting.Builder()
+        .name("ignore-distance")
+        .description("Ignores entities beyond the maximum distance.")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Double> maxDistance = sgGeneral.add(new DoubleSetting.Builder()
+        .name("max-distance")
+        .description("Maximum distance at which entities are rendered.")
+        .defaultValue(128)
+        .min(0)
+        .sliderMax(256)
+        .visible(ignoreDistance::get)
+        .build()
+    );
+
     public final Setting<ShapeMode> shapeMode = sgGeneral.add(new EnumSetting.Builder<ShapeMode>()
         .name("shape-mode")
         .description("How the shapes are rendered.")
@@ -356,6 +373,7 @@ public class ESP extends Module {
     }
 
     public boolean shouldSkip(Entity entity) {
+        if (ignoreDistance.get() && PlayerUtils.squaredDistanceToCamera(entity) > maxDistance.get() * maxDistance.get()) return true;
         if (drawAsTarget(entity)) return false;
         if (!entities.get().contains(entity.getType())) return true;
         if (entity == mc.player && ignoreSelf.get()) return true;

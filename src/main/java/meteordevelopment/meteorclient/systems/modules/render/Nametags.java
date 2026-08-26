@@ -91,6 +91,23 @@ public class Nametags extends Module {
         .build()
     );
 
+    private final Setting<Boolean> ignoreDistance = sgGeneral.add(new BoolSetting.Builder()
+        .name("ignore-distance")
+        .description("Ignores entities beyond the maximum distance.")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Double> maxDistance = sgGeneral.add(new DoubleSetting.Builder()
+        .name("max-distance")
+        .description("Maximum distance at which nametags are rendered.")
+        .defaultValue(128)
+        .min(0)
+        .sliderMax(256)
+        .visible(ignoreDistance::get)
+        .build()
+    );
+
     private final Setting<Boolean> culling = sgGeneral.add(new BoolSetting.Builder()
         .name("culling")
         .description("Only render a certain number of nametags at a certain distance.")
@@ -339,6 +356,8 @@ public class Nametags extends Module {
                 if (EntityUtils.getGameMode((PlayerEntity) entity) == null && ignoreBots.get()) continue;
                 if (Friends.get().isFriend((PlayerEntity) entity) && ignoreFriends.get()) continue;
             }
+
+            if (ignoreDistance.get() && PlayerUtils.squaredDistanceToCamera(entity) > maxDistance.get() * maxDistance.get()) continue;
 
             if (!culling.get() || PlayerUtils.isWithinCamera(entity, maxCullRange.get())) {
                 entityList.add(entity);
