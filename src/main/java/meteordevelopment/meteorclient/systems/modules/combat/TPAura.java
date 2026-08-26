@@ -13,6 +13,7 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.systems.modules.movement.ClickTP;
 import meteordevelopment.meteorclient.utils.entity.EntityUtils;
 import meteordevelopment.meteorclient.utils.entity.SortPriority;
 import meteordevelopment.meteorclient.utils.entity.Target;
@@ -38,7 +39,9 @@ import net.minecraft.item.*;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.GameMode;
 
@@ -46,7 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class KillAura extends Module {
+public class TPAura extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgTargeting = settings.createGroup("Targeting");
     private final SettingGroup sgTiming = settings.createGroup("Timing");
@@ -146,7 +149,7 @@ public class KillAura extends Module {
         .description("How many entities to target at once.")
         .defaultValue(1)
         .min(1)
-        .sliderRange(1, 5)
+        .sliderRange(1, 1)
         .visible(() -> !onlyOnLook.get())
         .build()
     );
@@ -154,9 +157,9 @@ public class KillAura extends Module {
     private final Setting<Double> range = sgTargeting.add(new DoubleSetting.Builder()
         .name("range")
         .description("The maximum range the entity can be to attack it.")
-        .defaultValue(4.5)
+        .defaultValue(10)
         .min(0)
-        .sliderMax(6)
+        .sliderMax(30)
         .build()
     );
 
@@ -267,8 +270,8 @@ public class KillAura extends Module {
     public boolean attacking, swapped;
     public static int previousSlot;
 
-    public KillAura() {
-        super(Categories.Combat, "kill-aura", "Attacks specified entities around you.");
+    public TPAura() {
+        super(Categories.Combat, "tp-aura", "Teleports to and attacks specified entities around you.");
     }
 
     @Override
@@ -464,6 +467,9 @@ public class KillAura extends Module {
 
     private void attack(Entity target) {
         if (rotation.get() == RotationMode.OnHit) Rotations.rotate(Rotations.getYaw(target), Rotations.getPitch(target, Target.Body));
+
+        BlockPos targetPos = BlockPos.ofFloored(target.getX(), target.getY() - 1, target.getZ());
+        ClickTP.teleport(targetPos, Direction.UP);
 
         mc.interactionManager.attackEntity(mc.player, target);
         mc.player.swingHand(Hand.MAIN_HAND);

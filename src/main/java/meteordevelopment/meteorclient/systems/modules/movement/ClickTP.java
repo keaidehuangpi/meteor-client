@@ -10,6 +10,7 @@ import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.BlockState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Camera;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.consume.UseAction;
@@ -61,28 +62,31 @@ public class ClickTP extends Module {
         BlockHitResult hitResult = mc.world.raycast(context);
 
         if (hitResult.getType() == HitResult.Type.BLOCK) {
-            BlockPos pos = hitResult.getBlockPos();
-            Direction side = hitResult.getSide();
-
-            if (mc.world.getBlockState(pos).onUse(mc.world, mc.player, hitResult) != ActionResult.PASS) return;
-
-            BlockState state = mc.world.getBlockState(pos);
-
-            VoxelShape shape = state.getCollisionShape(mc.world, pos);
-            if (shape.isEmpty()) shape = state.getOutlineShape(mc.world, pos);
-
-            double height = shape.isEmpty() ? 1 : shape.getMax(Direction.Axis.Y);
-
-            Vec3d newPos = new Vec3d(pos.getX() + 0.5 + side.getOffsetX(), pos.getY() + height, pos.getZ() + 0.5 + side.getOffsetZ());
-            int packetsRequired = (int) Math.ceil(mc.player.getEntityPos().distanceTo(newPos) / 10) - 1; // subtract 1 to account for the final packet with movement
-            if (packetsRequired > 19) packetsRequired = 0;
-
-            for (int packetNumber = 0; packetNumber < (packetsRequired); packetNumber++) {
-                mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true, true));
+            if (mc.world.getBlockState(hitResult.getBlockPos()).onUse(mc.world, mc.player, hitResult) != ActionResult.PASS) {
+                return;
             }
-
-            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(newPos.x, newPos.y, newPos.z, true, true));
-            mc.player.setPosition(newPos);
+            teleport(hitResult.getBlockPos(),hitResult.getSide());
         }
+    }
+
+    public static void teleport(BlockPos pos,Direction side) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        BlockState state = mc.world.getBlockState(pos);
+
+        VoxelShape shape = state.getCollisionShape(mc.world, pos);
+        if (shape.isEmpty()) shape = state.getOutlineShape(mc.world, pos);
+
+        double height = shape.isEmpty() ? 1 : shape.getMax(Direction.Axis.Y);
+
+        Vec3d newPos = new Vec3d(pos.getX() + 0.5 + side.getOffsetX(), pos.getY() + height, pos.getZ() + 0.5 + side.getOffsetZ());
+        int packetsRequired = (int) Math.ceil(mc.player.getEntityPos().distanceTo(newPos) / 10) - 1; // subtract 1 to account for the final packet with movement
+        if (packetsRequired > 19) packetsRequired = 0;
+
+        for (int packetNumber = 0; packetNumber < (packetsRequired); packetNumber++) {
+            mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true, true));
+        }
+
+        mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(newPos.x, newPos.y, newPos.z, true, true));
+        mc.player.setPosition(newPos);
     }
 }
