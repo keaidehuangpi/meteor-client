@@ -149,7 +149,7 @@ public class TPAura extends Module {
         .description("How many entities to target at once.")
         .defaultValue(1)
         .min(1)
-        .sliderRange(1, 1)
+        .sliderRange(1, 5)
         .visible(() -> !onlyOnLook.get())
         .build()
     );
@@ -160,6 +160,15 @@ public class TPAura extends Module {
         .defaultValue(10)
         .min(0)
         .sliderMax(30)
+        .build()
+    );
+
+    private final Setting<Double> attackRange = sgTargeting.add(new DoubleSetting.Builder()
+        .name("attack-range")
+        .description("The range around you after teleporting in which entities can be attacked.")
+        .defaultValue(4.5)
+        .min(0)
+        .sliderMax(6)
         .build()
     );
 
@@ -265,6 +274,7 @@ public class TPAura extends Module {
 
     private final static ArrayList<Item> FILTER = new ArrayList<>(List.of(Items.DIAMOND_SWORD, Items.DIAMOND_AXE, Items.DIAMOND_PICKAXE, Items.DIAMOND_SHOVEL, Items.DIAMOND_HOE, Items.MACE, Items.DIAMOND_SPEAR, Items.TRIDENT));
     private final List<Entity> targets = new ArrayList<>();
+    private final List<Entity> attackTargets = new ArrayList<>();
     private int switchTimer, hitTimer;
     private boolean wasPathing = false;
     public boolean attacking, swapped;
@@ -283,6 +293,7 @@ public class TPAura extends Module {
     @Override
     public void onDeactivate() {
         targets.clear();
+        attackTargets.clear();
         stopAttacking();
     }
 
@@ -320,7 +331,7 @@ public class TPAura extends Module {
             targets.add(mc.targetedEntity);
         } else {
             targets.clear();
-            TargetUtils.getList(targets, this::entityCheck, priority.get(), maxTargets.get());
+            TargetUtils.getList(targets, this::entityCheck, priority.get(), 1);
         }
 
         if (targets.isEmpty()) {
@@ -359,7 +370,16 @@ public class TPAura extends Module {
             wasPathing = true;
         }
 
-        if (delayCheck()) targets.forEach(this::attack);
+        if (delayCheck()) {
+            teleport(primary);
+            attackTargets.clear();
+            if (onlyOnLook.get()) {
+                if (entityCheck(primary, attackRange.get())) attackTargets.add(primary);
+            } else {
+                TargetUtils.getList(attackTargets, entity -> entityCheck(entity, attackRange.get()), priority.get(), maxTargets.get());
+            }
+            attackTargets.forEach(this::attack);
+        }
     }
 
     @EventHandler
@@ -396,6 +416,10 @@ public class TPAura extends Module {
     }
 
     private boolean entityCheck(Entity entity) {
+        return entityCheck(entity, range.get());
+    }
+
+    private boolean entityCheck(Entity entity, double targetRange) {
         if (entity.equals(mc.player) || entity.equals(mc.getCameraEntity())) return false;
         if ((entity instanceof LivingEntity livingEntity && livingEntity.isDead()) || !entity.isAlive()) return false;
 
@@ -404,7 +428,7 @@ public class TPAura extends Module {
             MathHelper.clamp(mc.player.getX(), hitbox.minX, hitbox.maxX),
             MathHelper.clamp(mc.player.getY(), hitbox.minY, hitbox.maxY),
             MathHelper.clamp(mc.player.getZ(), hitbox.minZ, hitbox.maxZ),
-            range.get()
+            targetRange
         )) return false;
 
         if (!entities.get().contains(entity.getType())) return false;
@@ -468,13 +492,15 @@ public class TPAura extends Module {
     private void attack(Entity target) {
         if (rotation.get() == RotationMode.OnHit) Rotations.rotate(Rotations.getYaw(target), Rotations.getPitch(target, Target.Body));
 
-        BlockPos targetPos = BlockPos.ofFloored(target.getX(), target.getY() - 1, target.getZ());
-        ClickTP.teleport(targetPos, Direction.UP);
-
         mc.interactionManager.attackEntity(mc.player, target);
         mc.player.swingHand(Hand.MAIN_HAND);
 
         hitTimer = 0;
+    }
+
+    private void teleport(Entity target) {
+        BlockPos targetPos = BlockPos.ofFloored(target.getX(), target.getY() - 1, target.getZ());
+        ClickTP.teleport(targetPos, Direction.UP);
     }
 
     private boolean acceptableWeapon(ItemStack stack) {
