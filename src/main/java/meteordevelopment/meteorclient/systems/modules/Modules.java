@@ -540,6 +540,7 @@ public class Modules extends System<Modules> {
         add(new AutoBrewer());
         add(new AutoMount());
         add(new AutoNametag());
+        add(new AutoPlant());
         add(new AutoShearer());
         add(new AutoSign());
         add(new AutoSmelter());

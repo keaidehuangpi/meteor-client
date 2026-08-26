@@ -163,6 +163,13 @@ public class TPAura extends Module {
         .build()
     );
 
+    private final Setting<Boolean> excludeAirborne = sgTargeting.add(new BoolSetting.Builder()
+        .name("exclude-airborne")
+        .description("Excludes airborne entities from being selected as the teleport target.")
+        .defaultValue(true)
+        .build()
+    );
+
     private final Setting<Double> attackRange = sgTargeting.add(new DoubleSetting.Builder()
         .name("attack-range")
         .description("The range around you after teleporting in which entities can be attacked.")
@@ -322,7 +329,7 @@ public class TPAura extends Module {
         if (onlyOnLook.get()) {
             Entity targeted = mc.targetedEntity;
 
-            if (targeted == null || !entityCheck(targeted)) {
+            if (targeted == null || !entityCheck(targeted, range.get(), excludeAirborne.get())) {
                 stopAttacking();
                 return;
             }
@@ -331,7 +338,7 @@ public class TPAura extends Module {
             targets.add(mc.targetedEntity);
         } else {
             targets.clear();
-            TargetUtils.getList(targets, this::entityCheck, priority.get(), 1);
+            TargetUtils.getList(targets, entity -> entityCheck(entity, range.get(), excludeAirborne.get()), priority.get(), 1);
         }
 
         if (targets.isEmpty()) {
@@ -415,13 +422,14 @@ public class TPAura extends Module {
         return false;
     }
 
-    private boolean entityCheck(Entity entity) {
-        return entityCheck(entity, range.get());
+    private boolean entityCheck(Entity entity, double targetRange) {
+        return entityCheck(entity, targetRange, false);
     }
 
-    private boolean entityCheck(Entity entity, double targetRange) {
+    private boolean entityCheck(Entity entity, double targetRange, boolean excludeAirborne) {
         if (entity.equals(mc.player) || entity.equals(mc.getCameraEntity())) return false;
         if ((entity instanceof LivingEntity livingEntity && livingEntity.isDead()) || !entity.isAlive()) return false;
+        if (excludeAirborne && !entity.isOnGround()) return false;
 
         Box hitbox = entity.getBoundingBox();
         if (!PlayerUtils.isWithin(

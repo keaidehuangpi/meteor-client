@@ -25,6 +25,8 @@ import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 
 public class Criticals extends Module {
+    private static final double MACE_HEIGHT_SEARCH_STEP = 0.25;
+    private static final int MACE_HEIGHT_SEARCH_REFINEMENTS = 8;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgMace = settings.createGroup("Mace");
@@ -89,7 +91,7 @@ public class Criticals extends Module {
                 if (mc.player.isGliding()) return;
 
                 sendPacket(0);
-                sendPacket(1.501 + extraHeight.get());
+                sendPacket(findMaceHeight(1.501 + extraHeight.get()));
                 sendPacket(0);
             } else {
                 if (skipCrit()) return;
@@ -181,6 +183,37 @@ public class Criticals extends Module {
         PlayerMoveC2SPacket packet = new PlayerMoveC2SPacket.PositionAndOnGround(x, y + height, z, false, false);
         ((IPlayerMoveC2SPacket) packet).meteor$setTag(1337);
         mc.player.networkHandler.sendPacket(packet);
+    }
+
+    private double findMaceHeight(double requestedHeight) {
+        if (isMacePositionClear(requestedHeight)) return requestedHeight;
+
+        double clearHeight = 0;
+        double blockedHeight = requestedHeight;
+        for (double height = requestedHeight - MACE_HEIGHT_SEARCH_STEP; height > 0; height -= MACE_HEIGHT_SEARCH_STEP) {
+            if (!isMacePositionClear(height)) {
+                blockedHeight = height;
+                continue;
+            }
+
+            clearHeight = height;
+            break;
+        }
+
+        if (!isMacePositionClear(clearHeight)) return 0;
+
+        for (int i = 0; i < MACE_HEIGHT_SEARCH_REFINEMENTS; i++) {
+            double middleHeight = (clearHeight + blockedHeight) / 2;
+
+            if (isMacePositionClear(middleHeight)) clearHeight = middleHeight;
+            else blockedHeight = middleHeight;
+        }
+
+        return clearHeight;
+    }
+
+    private boolean isMacePositionClear(double height) {
+        return mc.world.isSpaceEmpty(mc.player, mc.player.getBoundingBox().offset(0, height, 0));
     }
 
     private boolean skipCrit() {
