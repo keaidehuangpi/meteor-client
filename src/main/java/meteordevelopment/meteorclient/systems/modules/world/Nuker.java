@@ -451,7 +451,7 @@ public class Nuker extends Module {
                 if (blockState.isOf(Blocks.SUGAR_CANE)){
                     if (!mc.world.getBlockState(blockPos.down()).isOf(Blocks.SUGAR_CANE)){
                         return;
-                    } else if (mc.world.getBlockState(blockPos.up()).isOf(Blocks.SUGAR_CANE)) {
+                    } else if (mc.world.getBlockState(blockPos.down(2)).isOf(Blocks.SUGAR_CANE)) {
                         return;
                     }
                 }else if(blockState.getBlock() instanceof CropBlock cropBlock){
