@@ -28,6 +28,9 @@ import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.CropBlock;
+import net.minecraft.block.SweetBerryBushBlock;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
 import net.minecraft.util.Hand;
@@ -186,6 +189,14 @@ public class Nuker extends Module {
         .defaultValue(true)
         .build()
     );
+
+    private final Setting<Boolean> cropNukerMode = sgGeneral.add(new BoolSetting.Builder()
+        .name("crop-nuker")
+        .description("Crop nuking mode.")
+        .defaultValue(true)
+        .build()
+    );
+
 
     // Whitelist and blacklist
 
@@ -436,6 +447,23 @@ public class Nuker extends Module {
 
             if (interact.get() && interacted.contains(blockPos)) return;
 
+            if (cropNukerMode.get()) {
+                if (blockState.isOf(Blocks.SUGAR_CANE)){
+                    if (!mc.world.getBlockState(blockPos.down()).isOf(Blocks.SUGAR_CANE)){
+                        return;
+                    } else if (mc.world.getBlockState(blockPos.up()).isOf(Blocks.SUGAR_CANE)) {
+                        return;
+                    }
+                }else if(blockState.getBlock() instanceof CropBlock cropBlock){
+                    if (!cropBlock.isMature(blockState)){
+                        return;
+                    }
+                } else if (blockState.isOf(Blocks.SWEET_BERRY_BUSH)) {
+                    if (!(blockState.get(SweetBerryBushBlock.AGE) == 3)) return;
+                }
+
+            }
+
             // Add block
             blocks.add(blockPos.toImmutable());
         });
@@ -495,6 +523,12 @@ public class Nuker extends Module {
     }
 
     private void breakBlock(BlockPos blockPos) {
+        if (cropNukerMode.get()&&mc.world.getBlockState(blockPos).isOf(Blocks.SWEET_BERRY_BUSH)){
+            BlockUtils.interact(new BlockHitResult(blockPos.toCenterPos(), BlockUtils.getDirection(blockPos), blockPos, true), Hand.MAIN_HAND, swing.get());
+            interacted.add(blockPos);
+            return;
+        }
+
         if (interact.get()) {
             // Interact mode
             BlockUtils.interact(new BlockHitResult(blockPos.toCenterPos(), BlockUtils.getDirection(blockPos), blockPos, true), Hand.MAIN_HAND, swing.get());

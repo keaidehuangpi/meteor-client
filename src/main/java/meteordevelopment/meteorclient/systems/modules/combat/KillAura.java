@@ -123,6 +123,12 @@ public class KillAura extends Module {
         .defaultValue(true)
         .build()
     );
+    private final Setting<Boolean> tpAura = sgGeneral.add(new BoolSetting.Builder()
+        .name("tp-aura")
+        .description("TP-AURA.")
+        .defaultValue(false)
+        .build()
+    );
 
     // Targeting
 
