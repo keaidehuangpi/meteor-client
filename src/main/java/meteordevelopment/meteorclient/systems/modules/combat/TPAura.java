@@ -43,8 +43,15 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.GameMode;
 
+import java.awt.AWTException;
+import java.awt.HeadlessException;
+import java.awt.Image;
+import java.awt.SystemTray;
+import java.awt.TrayIcon;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -127,6 +134,30 @@ public class TPAura extends Module {
         .build()
     );
 
+    private final Setting<Boolean> notifications = sgGeneral.add(new BoolSetting.Builder()
+        .name("notifications")
+        .description("Sends system notifications when you die or no target is found for a while.")
+        .defaultValue(true)
+        .build()
+    );
+
+    private final Setting<NoTargetMode> noTargetMode = sgGeneral.add(new EnumSetting.Builder<NoTargetMode>()
+        .name("no-target-mode")
+        .description("What to do when no target is found in the normal range.")
+        .defaultValue(NoTargetMode.Notify)
+        .build()
+    );
+
+    private final Setting<Integer> noTargetTimeout = sgGeneral.add(new IntSetting.Builder()
+        .name("no-target-timeout")
+        .description("How many seconds without a target before sending a notification.")
+        .defaultValue(5)
+        .min(1)
+        .sliderRange(1, 60)
+        .visible(() -> notifications.get() && noTargetMode.get() == NoTargetMode.Notify)
+        .build()
+    );
+
     // Targeting
 
     private final Setting<Set<EntityType<?>>> entities = sgTargeting.add(new EntityTypeListSetting.Builder()
@@ -160,6 +191,16 @@ public class TPAura extends Module {
         .defaultValue(10)
         .min(0)
         .sliderMax(30)
+        .build()
+    );
+
+    private final Setting<Double> expandedRange = sgTargeting.add(new DoubleSetting.Builder()
+        .name("expanded-range")
+        .description("The maximum search range used by the expand-range no-target mode.")
+        .defaultValue(30)
+        .min(0)
+        .sliderMax(100)
+        .visible(() -> noTargetMode.get() == NoTargetMode.ExpandRange)
         .build()
     );
 
@@ -283,6 +324,9 @@ public class TPAura extends Module {
     private final List<Entity> targets = new ArrayList<>();
     private final List<Entity> attackTargets = new ArrayList<>();
     private int switchTimer, hitTimer;
+    private int noTargetTicks;
+    private boolean deathNotified, noTargetNotified;
+    private TrayIcon desktopTrayIcon;
     private boolean wasPathing = false;
     public boolean attacking, swapped;
     public static int previousSlot;
@@ -295,6 +339,9 @@ public class TPAura extends Module {
     public void onActivate() {
         previousSlot = -1;
         swapped = false;
+        noTargetTicks = 0;
+        deathNotified = false;
+        noTargetNotified = false;
     }
 
     @Override
@@ -302,11 +349,21 @@ public class TPAura extends Module {
         targets.clear();
         attackTargets.clear();
         stopAttacking();
+        removeDesktopNotificationIcon();
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (!mc.player.isAlive() || PlayerUtils.getGameMode() == GameMode.SPECTATOR) {
+        if (!mc.player.isAlive()) {
+            if (notifications.get() && !deathNotified) {
+                sendDesktopNotification("Player died while TPAura was active.");
+                deathNotified = true;
+            }
+            stopAttacking();
+            return;
+        }
+        deathNotified = false;
+        if (PlayerUtils.getGameMode() == GameMode.SPECTATOR) {
             stopAttacking();
             return;
         }
@@ -329,22 +386,34 @@ public class TPAura extends Module {
         if (onlyOnLook.get()) {
             Entity targeted = mc.targetedEntity;
 
-            if (targeted == null || !entityCheck(targeted, range.get(), excludeAirborne.get())) {
-                stopAttacking();
-                return;
-            }
-
             targets.clear();
-            targets.add(mc.targetedEntity);
+            if (targeted != null && entityCheck(targeted, range.get(), excludeAirborne.get())) {
+                targets.add(targeted);
+            } else if (targeted != null && noTargetMode.get() == NoTargetMode.ExpandRange
+                && entityCheck(targeted, expandedSearchRange(), excludeAirborne.get())) {
+                targets.add(targeted);
+            }
         } else {
             targets.clear();
             TargetUtils.getList(targets, entity -> entityCheck(entity, range.get(), excludeAirborne.get()), priority.get(), 1);
+
+            if (targets.isEmpty() && noTargetMode.get() == NoTargetMode.ExpandRange) {
+                TargetUtils.getList(targets, entity -> entityCheck(entity, expandedSearchRange(), excludeAirborne.get()), priority.get(), 1);
+            }
         }
 
         if (targets.isEmpty()) {
+            if (noTargetMode.get() == NoTargetMode.Notify) handleNoTarget();
+            else {
+                noTargetTicks = 0;
+                noTargetNotified = false;
+            }
             stopAttacking();
             return;
         }
+
+        noTargetTicks = 0;
+        noTargetNotified = false;
 
         Entity primary = targets.getFirst();
 
@@ -424,6 +493,53 @@ public class TPAura extends Module {
 
     private boolean entityCheck(Entity entity, double targetRange) {
         return entityCheck(entity, targetRange, false);
+    }
+
+    private void handleNoTarget() {
+        if (!notifications.get()) {
+            noTargetTicks = 0;
+            noTargetNotified = false;
+            return;
+        }
+
+        noTargetTicks++;
+        int timeoutTicks = noTargetTimeout.get() * 20;
+        if (noTargetTicks >= timeoutTicks && !noTargetNotified) {
+            sendDesktopNotification("No valid TPAura target found for " + noTargetTimeout.get() + " seconds.");
+            noTargetNotified = true;
+        }
+    }
+
+    private double expandedSearchRange() {
+        return Math.max(range.get(), expandedRange.get());
+    }
+
+    private void sendDesktopNotification(String message) {
+        try {
+            if (!SystemTray.isSupported()) return;
+
+            if (desktopTrayIcon == null) {
+                Image image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+                desktopTrayIcon = new TrayIcon(image, "Meteor Client");
+                desktopTrayIcon.setImageAutoSize(true);
+                SystemTray.getSystemTray().add(desktopTrayIcon);
+            }
+
+            desktopTrayIcon.displayMessage("TPAura", message, TrayIcon.MessageType.WARNING);
+        } catch (AWTException | HeadlessException | SecurityException ignored) {
+            // Desktop notifications are best-effort and may be unavailable in headless environments.
+        }
+    }
+
+    private void removeDesktopNotificationIcon() {
+        if (desktopTrayIcon == null) return;
+
+        try {
+            if (SystemTray.isSupported()) SystemTray.getSystemTray().remove(desktopTrayIcon);
+        } catch (HeadlessException | SecurityException ignored) {
+            // Ignore unavailable desktop notification services.
+        }
+        desktopTrayIcon = null;
     }
 
     private boolean entityCheck(Entity entity, double targetRange, boolean excludeAirborne) {
@@ -507,8 +623,39 @@ public class TPAura extends Module {
     }
 
     private void teleport(Entity target) {
-        BlockPos targetPos = BlockPos.ofFloored(target.getX(), target.getY() - 1, target.getZ());
-        ClickTP.teleport(targetPos, Direction.UP);
+        Vec3d start = mc.player.getEntityPos();
+        Vec3d end = target.getEntityPos();
+        double maxStep = Math.max(0.1, range.get() * 0.8);
+        int steps = (int) Math.ceil(start.distanceTo(end) / maxStep);
+
+        for (int i = 1; i <= steps; i++) {
+            if (i == steps) {
+                BlockPos targetPos = BlockPos.ofFloored(target.getX(), target.getY() - 1, target.getZ());
+                ClickTP.teleport(targetPos, Direction.UP);
+                continue;
+            }
+
+            Vec3d point = start.lerp(end, i / (double) steps);
+            BlockPos landing = findLandingBlock(point);
+            if (landing == null) landing = BlockPos.ofFloored(point.x, point.y - 1, point.z);
+            ClickTP.teleport(landing, Direction.UP);
+        }
+    }
+
+    private BlockPos findLandingBlock(Vec3d point) {
+        int x = MathHelper.floor(point.x);
+        int y = MathHelper.floor(point.y) - 1;
+        int z = MathHelper.floor(point.z);
+
+        for (int offset = -2; offset <= 2; offset++) {
+            BlockPos floor = new BlockPos(x, y + offset, z);
+            if (mc.world.getBlockState(floor).getCollisionShape(mc.world, floor).isEmpty()) continue;
+            if (!mc.world.getBlockState(floor.up()).getCollisionShape(mc.world, floor.up()).isEmpty()) continue;
+            if (!mc.world.getBlockState(floor.up(2)).getCollisionShape(mc.world, floor.up(2)).isEmpty()) continue;
+            return floor;
+        }
+
+        return null;
     }
 
     private boolean acceptableWeapon(ItemStack stack) {
@@ -551,6 +698,11 @@ public class TPAura extends Module {
         Ignore,
         Break,
         None
+    }
+
+    public enum NoTargetMode {
+        Notify,
+        ExpandRange
     }
 
     public enum EntityAge {
