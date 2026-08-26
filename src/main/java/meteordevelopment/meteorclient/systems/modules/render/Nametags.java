@@ -58,7 +58,8 @@ public class Nametags extends Module {
     private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
         .name("entities")
         .description("Select entities to draw nametags on.")
-        .defaultValue(EntityType.PLAYER, EntityType.ITEM)
+        .defaultValue(EntityType.PLAYER)
+        .filter(type -> type != EntityType.ITEM)
         .build()
     );
 
@@ -349,6 +350,7 @@ public class Nametags extends Module {
 
         for (Entity entity : mc.world.getEntities()) {
             EntityType<?> type = entity.getType();
+            if (type == EntityType.ITEM) continue;
             if (!entities.get().contains(type)) continue;
 
             if (type == EntityType.PLAYER) {
@@ -382,7 +384,6 @@ public class Nametags extends Module {
 
             if (NametagUtils.to2D(pos, scale.get())) {
                 if (type == EntityType.PLAYER) renderNametagPlayer(event, (PlayerEntity) entity, shadow);
-                else if (type == EntityType.ITEM) renderNametagItem(((ItemEntity) entity).getStack(), shadow);
                 else if (type == EntityType.ITEM_FRAME || type == EntityType.GLOW_ITEM_FRAME)
                     renderNametagItem(((ItemFrameEntity) entity).getHeldItemStack(), shadow);
                 else if (type == EntityType.TNT) renderTntNametag(ticksToTime(((TntEntity) entity).getFuse()), shadow);
@@ -409,7 +410,7 @@ public class Nametags extends Module {
     private double getHeight(Entity entity) {
         double height = entity.getEyeHeight(entity.getPose());
 
-        if (entity.getType() == EntityType.ITEM || entity.getType() == EntityType.ITEM_FRAME || entity.getType() == EntityType.GLOW_ITEM_FRAME) height += 0.2;
+        if (entity.getType() == EntityType.ITEM_FRAME || entity.getType() == EntityType.GLOW_ITEM_FRAME) height += 0.2;
         else height += 0.5;
 
         return height;

@@ -135,6 +135,7 @@ public class ESP extends Module {
         .name("entities")
         .description("Select specific entities.")
         .defaultValue(EntityType.PLAYER)
+        .filter(type -> type != EntityType.ITEM)
         .build()
     );
 
@@ -373,6 +374,7 @@ public class ESP extends Module {
     }
 
     public boolean shouldSkip(Entity entity) {
+        if (entity.getType() == EntityType.ITEM) return true;
         if (ignoreDistance.get() && PlayerUtils.squaredDistanceToCamera(entity) > maxDistance.get() * maxDistance.get()) return true;
         if (drawAsTarget(entity)) return false;
         if (!entities.get().contains(entity.getType())) return true;
@@ -382,7 +384,7 @@ public class ESP extends Module {
     }
 
     public boolean shouldSkip(EntityType<?> entityType) {
-        return !entities.get().contains(entityType);
+        return entityType == EntityType.ITEM || !entities.get().contains(entityType);
     }
 
     public Color getColor(Entity entity) {
