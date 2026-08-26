@@ -216,6 +216,14 @@ public class Criticals extends Module {
         return mc.world.isSpaceEmpty(mc.player, mc.player.getBoundingBox().offset(0, height, 0));
     }
 
+    public boolean isMaceMode() {
+        return mace.get();
+    }
+
+    public double getMaceHeight() {
+        return findMaceHeight(1.501 + extraHeight.get());
+    }
+
     private boolean skipCrit() {
         if (EntityUtils.isInCobweb(mc.player) && (mode.get() == Mode.Jump || mode.get() == Mode.MiniJump))
             return true;

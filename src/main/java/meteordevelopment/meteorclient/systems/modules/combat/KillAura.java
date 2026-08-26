@@ -451,10 +451,15 @@ public class KillAura extends Module {
             return false;
         }
 
-        float delay = (customDelay.get()) ? hitDelay.get() : 0.5f;
+        boolean maceCriticals = mc.player.getMainHandStack().getItem() instanceof MaceItem
+            && Modules.get().isActive(Criticals.class)
+            && Modules.get().get(Criticals.class).isMaceMode();
+        boolean useCustomDelay = customDelay.get() || maceCriticals;
+
+        float delay = useCustomDelay ? hitDelay.get() : 0.5f;
         if (tpsSync.get()) delay /= (TickRate.INSTANCE.getTickRate() / 20);
 
-        if (customDelay.get()) {
+        if (useCustomDelay) {
             if (hitTimer < delay) {
                 hitTimer++;
                 return false;

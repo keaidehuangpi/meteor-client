@@ -157,11 +157,19 @@ public class DamageUtils {
         float itemDamage = (float) attacker.getAttributeValue(EntityAttributes.ATTACK_DAMAGE);
         DamageSource damageSource = attacker instanceof PlayerEntity player ? mc.world.getDamageSources().playerAttack(player) : mc.world.getDamageSources().mobAttack(attacker);
 
-        float damage = modifyAttackDamage(attacker, target, attacker.getWeaponStack(), damageSource, itemDamage);
+        float damage = modifyAttackDamage(attacker, target, attacker.getWeaponStack(), damageSource, itemDamage, null);
         return calculateReductions(damage, target, damageSource);
     }
 
     public static float getAttackDamage(LivingEntity attacker, Entity target, ItemStack weapon) {
+        return getAttackDamage(attacker, target, weapon, null);
+    }
+
+    public static float getAttackDamage(LivingEntity attacker, Entity target, ItemStack weapon, double fallDistance) {
+        return getAttackDamage(attacker, target, weapon, Double.valueOf(fallDistance));
+    }
+
+    private static float getAttackDamage(LivingEntity attacker, Entity target, ItemStack weapon, Double fallDistanceOverride) {
         EntityAttributeInstance original = attacker.getAttributeInstance(EntityAttributes.ATTACK_DAMAGE);
         EntityAttributeInstance copy = new EntityAttributeInstance(EntityAttributes.ATTACK_DAMAGE, o -> {});
 
@@ -181,11 +189,11 @@ public class DamageUtils {
         float itemDamage = (float) copy.getValue();
         DamageSource damageSource = attacker instanceof PlayerEntity player ? mc.world.getDamageSources().playerAttack(player) : mc.world.getDamageSources().mobAttack(attacker);
 
-        float damage = modifyAttackDamage(attacker, target, weapon, damageSource, itemDamage);
+        float damage = modifyAttackDamage(attacker, target, weapon, damageSource, itemDamage, fallDistanceOverride);
         return calculateReductions(damage, target, damageSource);
     }
 
-    private static float modifyAttackDamage(LivingEntity attacker, Entity target, ItemStack weapon, DamageSource damageSource, float damage) {
+    private static float modifyAttackDamage(LivingEntity attacker, Entity target, ItemStack weapon, DamageSource damageSource, float damage, Double fallDistanceOverride) {
         // Get enchant damage
         Object2IntMap<RegistryEntry<Enchantment>> enchantments = new Object2IntOpenHashMap<>();
         Utils.getEnchantments(weapon, enchantments);
@@ -217,22 +225,33 @@ public class DamageUtils {
             damage *= 0.2f + charge * charge * 0.8f;
             enchantDamage *= charge;
 
+            double fallDistance = fallDistanceOverride != null ? fallDistanceOverride : attacker.fallDistance;
+
             if (weapon.getItem() instanceof MaceItem item) {
-                float bonusDamage = item.getBonusAttackDamage(target, damage, damageSource);
+                float bonusDamage = fallDistanceOverride == null
+                    ? item.getBonusAttackDamage(target, damage, damageSource)
+                    : getMaceBonusAttackDamage(fallDistance);
                 if (bonusDamage > 0f) {
                     int density = Utils.getEnchantmentLevel(weapon, Enchantments.DENSITY);
-                    if (density > 0) bonusDamage += (float) (0.5f * attacker.fallDistance);
+                    if (density > 0) bonusDamage += (float) (0.5f * fallDistance);
                     damage += bonusDamage;
                 }
             }
 
             // Factor critical hit
-            if (charge > 0.9f && attacker.fallDistance > 0f && !attacker.isOnGround() && !attacker.isClimbing() && !attacker.isTouchingWater() && !attacker.hasStatusEffect(StatusEffects.BLINDNESS) && !attacker.hasVehicle()) {
+            if (charge > 0.9f && fallDistance > 0f && !attacker.isOnGround() && !attacker.isClimbing() && !attacker.isTouchingWater() && !attacker.hasStatusEffect(StatusEffects.BLINDNESS) && !attacker.hasVehicle()) {
                 damage *= 1.5f;
             }
         }
 
         return damage + enchantDamage;
+    }
+
+    private static float getMaceBonusAttackDamage(double fallDistance) {
+        if (fallDistance <= 1.5) return 0f;
+        if (fallDistance <= 3) return (float) (fallDistance * 4);
+        if (fallDistance <= 8) return (float) (12 + (fallDistance - 3) * 2);
+        return (float) (22 + fallDistance - 8);
     }
 
     // Fall Damage
