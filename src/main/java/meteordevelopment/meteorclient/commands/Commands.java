@@ -31,6 +31,7 @@ public class Commands {
     public static void init() {
         add(new VClipCommand());
         add(new HClipCommand());
+        add(new TeleportCommand());
         add(new DismountCommand());
         add(new DisconnectCommand());
         add(new DamageCommand());
