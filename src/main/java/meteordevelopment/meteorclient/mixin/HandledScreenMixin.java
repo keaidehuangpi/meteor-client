@@ -82,6 +82,13 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> extends Screen
                     .size(40, 20)
                     .build()
             );
+
+            addDrawableChild(
+                new ButtonWidget.Builder(Text.literal("Store"), button -> invTweaks.store(getScreenHandler()))
+                    .position(x + 84, y - 22)
+                    .size(40, 20)
+                    .build()
+            );
         }
     }
 

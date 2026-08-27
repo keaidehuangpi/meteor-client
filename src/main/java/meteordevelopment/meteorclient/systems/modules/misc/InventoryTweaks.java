@@ -38,7 +38,9 @@ import net.minecraft.screen.slot.Slot;
 import net.minecraft.util.Hand;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class InventoryTweaks extends Module {
@@ -460,6 +462,52 @@ public class InventoryTweaks extends Module {
     public void dump(ScreenHandler handler) {
         int playerInvOffset = SlotUtils.indexToId(SlotUtils.MAIN_START);
         MeteorExecutor.execute(() -> moveSlots(handler, playerInvOffset, playerInvOffset + 4 * 9, false));
+    }
+
+    /**
+     * Moves every matching item from the player's inventory into a container that is primarily filled with that item.
+     */
+    public void store(ScreenHandler handler) {
+        Item item = getStoredItem(handler);
+        if (item == null) return;
+
+        int playerInvOffset = SlotUtils.indexToId(SlotUtils.MAIN_START);
+        MeteorExecutor.execute(() -> {
+            for (int i = playerInvOffset; i < playerInvOffset + 4 * 9; i++) {
+                if (!handler.getSlot(i).hasStack() || handler.getSlot(i).getStack().getItem() != item) continue;
+
+                if (mc.currentScreen == null || !Utils.canUpdate()) break;
+                InvUtils.shiftClick().slotId(i);
+            }
+        });
+    }
+
+    private Item getStoredItem(ScreenHandler handler) {
+        int containerSlotCount = SlotUtils.indexToId(SlotUtils.MAIN_START);
+        if (containerSlotCount <= 0 || containerSlotCount > handler.slots.size()) return null;
+
+        Map<Item, Integer> itemCounts = new HashMap<>();
+        int occupiedSlots = 0;
+        for (int i = 0; i < containerSlotCount; i++) {
+            Slot slot = handler.getSlot(i);
+            if (!slot.hasStack()) continue;
+
+            occupiedSlots++;
+            itemCounts.merge(slot.getStack().getItem(), 1, Integer::sum);
+        }
+
+        if (occupiedSlots == 0) return null;
+
+        Item storedItem = null;
+        int maxCount = 0;
+        for (Map.Entry<Item, Integer> entry : itemCounts.entrySet()) {
+            if (entry.getValue() > maxCount) {
+                storedItem = entry.getKey();
+                maxCount = entry.getValue();
+            }
+        }
+
+        return maxCount * 100 >= occupiedSlots * 90 ? storedItem : null;
     }
 
     public boolean showButtons() {
