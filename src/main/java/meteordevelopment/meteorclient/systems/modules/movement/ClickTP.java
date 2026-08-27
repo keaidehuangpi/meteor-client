@@ -71,6 +71,12 @@ public class ClickTP extends Module {
 
     public static void teleport(BlockPos pos,Direction side) {
         MinecraftClient mc = MinecraftClient.getInstance();
+        Vec3d newPos = getTeleportPosition(pos, side);
+        teleport(mc.player.getEntityPos(), newPos, true);
+    }
+
+    public static Vec3d getTeleportPosition(BlockPos pos, Direction side) {
+        MinecraftClient mc = MinecraftClient.getInstance();
         BlockState state = mc.world.getBlockState(pos);
 
         VoxelShape shape = state.getCollisionShape(mc.world, pos);
@@ -78,8 +84,13 @@ public class ClickTP extends Module {
 
         double height = shape.isEmpty() ? 1 : shape.getMax(Direction.Axis.Y);
 
-        Vec3d newPos = new Vec3d(pos.getX() + 0.5 + side.getOffsetX(), pos.getY() + height, pos.getZ() + 0.5 + side.getOffsetZ());
-        int packetsRequired = (int) Math.ceil(mc.player.getEntityPos().distanceTo(newPos) / 10) - 1; // subtract 1 to account for the final packet with movement
+        return new Vec3d(pos.getX() + 0.5 + side.getOffsetX(), pos.getY() + height, pos.getZ() + 0.5 + side.getOffsetZ());
+    }
+
+    public static void teleport(Vec3d fromPos, Vec3d newPos, boolean updateClientPosition) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+
+        int packetsRequired = (int) Math.ceil(fromPos.distanceTo(newPos) / 10) - 1; // subtract 1 to account for the final packet with movement
         if (packetsRequired > 19) packetsRequired = 0;
 
         for (int packetNumber = 0; packetNumber < (packetsRequired); packetNumber++) {
@@ -87,6 +98,6 @@ public class ClickTP extends Module {
         }
 
         mc.player.networkHandler.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(newPos.x, newPos.y, newPos.z, true, true));
-        mc.player.setPosition(newPos);
+        if (updateClientPosition) mc.player.setPosition(newPos);
     }
 }

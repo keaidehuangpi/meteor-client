@@ -134,6 +134,13 @@ public class TPAura extends Module {
         .build()
     );
 
+    private final Setting<TeleportMode> teleportMode = sgGeneral.add(new EnumSetting.Builder<TeleportMode>()
+        .name("teleport-mode")
+        .description("Goto moves your client to the target. Stand only sends movement packets and returns after attacking.")
+        .defaultValue(TeleportMode.Goto)
+        .build()
+    );
+
     private final Setting<Boolean> notifications = sgGeneral.add(new BoolSetting.Builder()
         .name("notifications")
         .description("Sends system notifications when you die or no target is found for a while.")
@@ -447,14 +454,16 @@ public class TPAura extends Module {
         }
 
         if (delayCheck()) {
-            teleport(primary);
+            Vec3d clientPos = mc.player.getEntityPos();
+            Vec3d remotePos = teleportTo(primary, teleportMode.get() == TeleportMode.Goto);
             attackTargets.clear();
             if (onlyOnLook.get()) {
-                if (entityCheck(primary, attackRange.get())) attackTargets.add(primary);
+                if (entityCheck(primary, remotePos, attackRange.get(), false)) attackTargets.add(primary);
             } else {
-                TargetUtils.getList(attackTargets, entity -> entityCheck(entity, attackRange.get()), priority.get(), maxTargets.get());
+                TargetUtils.getList(attackTargets, entity -> entityCheck(entity, remotePos, attackRange.get(), false), priority.get(), maxTargets.get());
             }
             attackTargets.forEach(this::attack);
+            if (teleportMode.get() == TeleportMode.Stand) teleportBack(remotePos, clientPos);
         }
     }
 
@@ -543,21 +552,24 @@ public class TPAura extends Module {
     }
 
     private boolean entityCheck(Entity entity, double targetRange, boolean excludeAirborne) {
+        return entityCheck(entity, mc.player.getEntityPos(), targetRange, excludeAirborne);
+    }
+
+    private boolean entityCheck(Entity entity, Vec3d origin, double targetRange, boolean excludeAirborne) {
         if (entity.equals(mc.player) || entity.equals(mc.getCameraEntity())) return false;
         if ((entity instanceof LivingEntity livingEntity && livingEntity.isDead()) || !entity.isAlive()) return false;
         if (excludeAirborne && !entity.isOnGround()) return false;
 
         Box hitbox = entity.getBoundingBox();
-        if (!PlayerUtils.isWithin(
-            MathHelper.clamp(mc.player.getX(), hitbox.minX, hitbox.maxX),
-            MathHelper.clamp(mc.player.getY(), hitbox.minY, hitbox.maxY),
-            MathHelper.clamp(mc.player.getZ(), hitbox.minZ, hitbox.maxZ),
-            targetRange
-        )) return false;
+        double x = MathHelper.clamp(origin.x, hitbox.minX, hitbox.maxX);
+        double y = MathHelper.clamp(origin.y, hitbox.minY, hitbox.maxY);
+        double z = MathHelper.clamp(origin.z, hitbox.minZ, hitbox.maxZ);
+        double distanceSquared = origin.squaredDistanceTo(x, y, z);
+        if (distanceSquared > targetRange * targetRange) return false;
 
         if (!entities.get().contains(entity.getType())) return false;
         if (ignoreNamed.get() && entity.hasCustomName()) return false;
-        if (!PlayerUtils.canSeeEntity(entity) && !PlayerUtils.isWithin(entity, wallsRange.get())) return false;
+        if (!PlayerUtils.canSeeEntity(entity) && distanceSquared > wallsRange.get() * wallsRange.get()) return false;
         if (ignoreTamed.get()) {
             if (entity instanceof Tameable tameable
                 && tameable.getOwner() != null
@@ -622,23 +634,42 @@ public class TPAura extends Module {
         hitTimer = 0;
     }
 
-    private void teleport(Entity target) {
+    private Vec3d teleportTo(Entity target, boolean updateClientPosition) {
         Vec3d start = mc.player.getEntityPos();
         Vec3d end = target.getEntityPos();
         double maxStep = Math.max(0.1, range.get() * 0.8);
         int steps = (int) Math.ceil(start.distanceTo(end) / maxStep);
+        Vec3d packetPos = start;
 
         for (int i = 1; i <= steps; i++) {
             if (i == steps) {
                 BlockPos targetPos = BlockPos.ofFloored(target.getX(), target.getY() - 1, target.getZ());
-                ClickTP.teleport(targetPos, Direction.UP);
+                Vec3d nextPos = ClickTP.getTeleportPosition(targetPos, Direction.UP);
+                ClickTP.teleport(packetPos, nextPos, updateClientPosition);
+                packetPos = nextPos;
                 continue;
             }
 
             Vec3d point = start.lerp(end, i / (double) steps);
             BlockPos landing = findLandingBlock(point);
             if (landing == null) landing = BlockPos.ofFloored(point.x, point.y - 1, point.z);
-            ClickTP.teleport(landing, Direction.UP);
+            Vec3d nextPos = ClickTP.getTeleportPosition(landing, Direction.UP);
+            ClickTP.teleport(packetPos, nextPos, updateClientPosition);
+            packetPos = nextPos;
+        }
+
+        return packetPos;
+    }
+
+    private void teleportBack(Vec3d remotePos, Vec3d clientPos) {
+        double maxStep = Math.max(0.1, range.get() * 0.8);
+        int steps = (int) Math.ceil(remotePos.distanceTo(clientPos) / maxStep);
+        Vec3d packetPos = remotePos;
+
+        for (int i = 1; i <= steps; i++) {
+            Vec3d nextPos = remotePos.lerp(clientPos, i / (double) steps);
+            ClickTP.teleport(packetPos, nextPos, false);
+            packetPos = nextPos;
         }
     }
 
@@ -698,6 +729,11 @@ public class TPAura extends Module {
         Ignore,
         Break,
         None
+    }
+
+    public enum TeleportMode {
+        Goto,
+        Stand
     }
 
     public enum NoTargetMode {
