@@ -547,6 +547,14 @@ public class Nuker extends Module {
         }
     }
 
+    public boolean setCropWhitelist(Block crop) {
+        if (!cropNukerMode.get()) return false;
+
+        listMode.set(ListMode.Whitelist);
+        whitelist.set(new ArrayList<>(List.of(crop)));
+        return true;
+    }
+
     private boolean isOutOfRange(BlockPos blockPos) {
         Vec3d pos = blockPos.toCenterPos();
         RaycastContext raycastContext = new RaycastContext(mc.player.getEyePos(), pos, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player);
