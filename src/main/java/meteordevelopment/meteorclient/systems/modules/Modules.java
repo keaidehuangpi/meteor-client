@@ -437,6 +437,7 @@ public class Modules extends System<Modules> {
         add(new AutoTrade());
         add(new AutoRespawn());
         add(new AutoTool());
+        add(new AutoWater());
         add(new BreakDelay());
         add(new ChestSwap());
         add(new EXPThrower());
