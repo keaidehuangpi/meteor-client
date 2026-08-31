@@ -7,11 +7,14 @@ package meteordevelopment.meteorclient.systems.modules.player;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
+import meteordevelopment.meteorclient.systems.modules.combat.TPAura;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.item.ItemStack;
@@ -21,7 +24,19 @@ import net.minecraft.util.Hand;
 import static meteordevelopment.meteorclient.MeteorClient.mc;
 
 public class AutoShield extends Module {
+    public enum Mode {
+        Always,
+        Sometimes
+    }
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
+
+    private final Setting<Mode> mode = sgGeneral.add(new EnumSetting.Builder<Mode>()
+        .name("mode")
+        .description("When to block with the offhand shield. Sometimes blocks only while KillAura or TPAura has a target in range.")
+        .defaultValue(Mode.Always)
+        .build()
+    );
 
     private final Setting<Boolean> hideShield = sgGeneral.add(new BoolSetting.Builder()
         .name("hide-shield")
@@ -42,7 +57,7 @@ public class AutoShield extends Module {
         if (mc.player == null || mc.interactionManager == null) return;
 
         ItemStack offhand = mc.player.getOffHandStack();
-        if (!(offhand.getItem() instanceof ShieldItem) || shouldPauseForEating()) {
+        if (!(offhand.getItem() instanceof ShieldItem) || shouldPauseForEating() || !shouldShield()) {
             stopShielding();
             return;
         }
@@ -82,6 +97,16 @@ public class AutoShield extends Module {
 
         if (!mc.player.isUsingItem()) return false;
         return mc.player.getActiveItem().get(DataComponentTypes.FOOD) != null;
+    }
+
+    private boolean shouldShield() {
+        if (mode.get() == Mode.Always) return true;
+
+        KillAura killAura = Modules.get().get(KillAura.class);
+        if (killAura != null && killAura.isActive() && killAura.getTarget() != null) return true;
+
+        TPAura tpAura = Modules.get().get(TPAura.class);
+        return tpAura != null && tpAura.isActive() && tpAura.getTarget() != null;
     }
 
     public boolean shouldHideOffhandShield() {
