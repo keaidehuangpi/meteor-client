@@ -265,6 +265,10 @@ public class AutoGap extends Module {
         return shouldEatHealth();
     }
 
+    public boolean shouldEatNow() {
+        return shouldEat() && findSlot() != -1;
+    }
+
     private boolean shouldEatPotions() {
         Map<RegistryEntry<StatusEffect>, StatusEffectInstance> effects = mc.player.getActiveStatusEffects();
 

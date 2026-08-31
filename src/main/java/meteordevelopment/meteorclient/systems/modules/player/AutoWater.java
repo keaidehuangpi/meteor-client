@@ -13,20 +13,21 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Categories;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.player.PlayerUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.world.BlockIterator;
-import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.Blocks;
 import net.minecraft.fluid.FluidState;
 import net.minecraft.fluid.Fluids;
 import net.minecraft.item.Items;
+import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 public class AutoWater extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -98,14 +99,16 @@ public class AutoWater extends Module {
         target = null;
         targetDistance = Double.MAX_VALUE;
 
-        int radius = (int) Math.ceil(range.get());
+        double interactionRange = Math.min(range.get(), mc.player.getBlockInteractionRange());
+        int radius = (int) Math.ceil(interactionRange);
         BlockIterator.register(radius, radius, (blockPos, blockState) -> {
             if (!isInfiniteWaterSource(blockPos)) return;
 
-            Vec3d hitPos = blockPos.toCenterPos();
-            if (!PlayerUtils.isWithin(hitPos, range.get())) return;
+            Vec3d sourcePos = blockPos.toCenterPos();
+            if (mc.player.getEyePos().squaredDistanceTo(sourcePos) > interactionRange * interactionRange) return;
+            if (!canSeeWaterSource(blockPos, sourcePos)) return;
 
-            double distance = mc.player.getEyePos().squaredDistanceTo(hitPos);
+            double distance = mc.player.getEyePos().squaredDistanceTo(sourcePos);
             if (distance < targetDistance) {
                 target = blockPos.toImmutable();
                 targetDistance = distance;
@@ -117,13 +120,16 @@ public class AutoWater extends Module {
             if (target == null || currentHand == null) return;
 
             BlockPos waterPos = target;
-            Vec3d hitPos = waterPos.toCenterPos();
-            BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, waterPos, false);
+            Vec3d hitPos = getWaterHitPos(waterPos);
             Runnable action = () -> {
                 Hand actionHand = getBucketHand();
                 if (actionHand == null || !isInfiniteWaterSource(waterPos)) return;
 
-                BlockUtils.interact(hit, actionHand, swing.get());
+                // Empty buckets are filled by BucketItem.use(), which performs its own source-only raycast.
+                ActionResult result = mc.interactionManager.interactItem(mc.player, actionHand);
+                if (!result.isAccepted()) return;
+
+                if (swing.get()) mc.player.swingHand(actionHand);
                 timer = 0;
             };
 
@@ -133,8 +139,7 @@ public class AutoWater extends Module {
     }
 
     private boolean isInfiniteWaterSource(BlockPos pos) {
-        if (!mc.world.getBlockState(pos).isOf(Blocks.WATER)) return false;
-        if (!isStillWater(pos)) return false;
+        if (!mc.world.getBlockState(pos).isOf(Blocks.WATER) || !isStillWater(pos)) return false;
 
         int adjacentSources = 0;
         for (Direction direction : Direction.Type.HORIZONTAL) {
@@ -143,12 +148,34 @@ public class AutoWater extends Module {
         if (adjacentSources < 2) return false;
 
         BlockPos below = pos.down();
-        return isStillWater(below) || mc.world.getBlockState(below).isSolidBlock(mc.world, below);
+        return mc.world.getBlockState(below).isSolidBlock(mc.world, below) || isStillWater(below);
     }
 
     private boolean isStillWater(BlockPos pos) {
         FluidState fluidState = mc.world.getFluidState(pos);
         return fluidState.getFluid() == Fluids.WATER && fluidState.isStill();
+    }
+
+    private Vec3d getWaterHitPos(BlockPos pos) {
+        Vec3d eyePos = mc.player.getEyePos();
+        Vec3d center = pos.toCenterPos();
+
+        // Aim at the visible side of the source. BucketItem's raycast only needs
+        // the view to intersect the source block, so choosing a point between the
+        // eye and the center avoids aiming through the far side of a pool.
+        return eyePos.lerp(center, 0.75);
+    }
+
+    private boolean canSeeWaterSource(BlockPos pos, Vec3d hitPos) {
+        BlockHitResult result = mc.world.raycast(new RaycastContext(
+            mc.player.getEyePos(),
+            hitPos,
+            RaycastContext.ShapeType.OUTLINE,
+            RaycastContext.FluidHandling.SOURCE_ONLY,
+            mc.player
+        ));
+
+        return result.getType() == HitResult.Type.BLOCK && result.getBlockPos().equals(pos);
     }
 
     private Hand getBucketHand() {

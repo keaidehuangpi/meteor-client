@@ -434,6 +434,7 @@ public class Modules extends System<Modules> {
         add(new AutoGap());
         add(new AutoMend());
         add(new AutoReplenish());
+        add(new AutoShield());
         add(new AutoTrade());
         add(new AutoRespawn());
         add(new AutoTool());
