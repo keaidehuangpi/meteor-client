@@ -7,6 +7,7 @@ package meteordevelopment.meteorclient.systems.modules.player;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
+import meteordevelopment.meteorclient.settings.DoubleSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
@@ -17,6 +18,7 @@ import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
 import meteordevelopment.meteorclient.systems.modules.combat.TPAura;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.component.DataComponentTypes;
+import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.MaceItem;
 import net.minecraft.item.ShieldItem;
@@ -40,6 +42,16 @@ public class AutoShield extends Module {
         .name("mode")
         .description("When to block with the offhand shield. Sometimes blocks only while KillAura or TPAura has a target in range.")
         .defaultValue(Mode.Always)
+        .build()
+    );
+
+    private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder()
+        .name("range")
+        .description("Maximum distance to a KillAura or TPAura target before blocking in Sometimes mode.")
+        .defaultValue(4.5)
+        .min(0)
+        .sliderMax(6)
+        .visible(() -> mode.get() == Mode.Sometimes)
         .build()
     );
 
@@ -115,10 +127,14 @@ public class AutoShield extends Module {
         if (mode.get() == Mode.Always) return true;
 
         KillAura killAura = Modules.get().get(KillAura.class);
-        if (killAura != null && killAura.isActive() && killAura.getTarget() != null) return true;
+        if (killAura != null && killAura.isActive() && isInShieldRange(killAura.getTarget())) return true;
 
         TPAura tpAura = Modules.get().get(TPAura.class);
-        return tpAura != null && tpAura.isActive() && tpAura.getTarget() != null;
+        return tpAura != null && tpAura.isActive() && isInShieldRange(tpAura.getTarget());
+    }
+
+    private boolean isInShieldRange(Entity target) {
+        return target != null && mc.player.squaredDistanceTo(target) <= range.get() * range.get();
     }
 
     public boolean shouldHideOffhandShield() {
