@@ -18,8 +18,13 @@ import meteordevelopment.meteorclient.systems.modules.combat.TPAura;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.MaceItem;
 import net.minecraft.item.ShieldItem;
+import net.minecraft.registry.tag.ItemTags;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.RotationAxis;
 
 import static meteordevelopment.meteorclient.MeteorClient.mc;
 
@@ -35,6 +40,13 @@ public class AutoShield extends Module {
         .name("mode")
         .description("When to block with the offhand shield. Sometimes blocks only while KillAura or TPAura has a target in range.")
         .defaultValue(Mode.Always)
+        .build()
+    );
+
+    private final Setting<Boolean> blockingAnimations = sgGeneral.add(new BoolSetting.Builder()
+        .name("blocking-animations")
+        .description("Plays the classic 1.7 blocking and blocking-attack animations while using the shield.")
+        .defaultValue(false)
         .build()
     );
 
@@ -111,5 +123,38 @@ public class AutoShield extends Module {
 
     public boolean shouldHideOffhandShield() {
         return isActive() && hideShield.get();
+    }
+
+    public boolean shouldAnimateBlocking() {
+        return isActive()
+            && blockingAnimations.get()
+            && mc.player != null
+            && mc.player.isUsingItem()
+            && mc.player.getActiveHand() == Hand.OFF_HAND
+            && mc.player.getOffHandStack().getItem() instanceof ShieldItem;
+    }
+
+    public boolean shouldAnimateSwordBlock(ItemStack itemStack) {
+        return shouldAnimateBlocking() && itemStack != null && (itemStack.isIn(ItemTags.SWORDS) || itemStack.getItem() instanceof MaceItem);
+    }
+
+    public void applyFirstPersonBlockingTransform(MatrixStack matrices) {
+        matrices.translate(-0.15f, 0.16f, 0.15f);
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-18.0f));
+        matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(82.0f));
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(112.0f));
+    }
+
+    public void applyThirdPersonBlockingTransform(MatrixStack matrices) {
+        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90.0f));
+        matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(-40.0f));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(51.0f));
+        matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(180.0f));
+        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(197.2f));
+        matrices.translate(-0.22f, 0.13f, -0.22f);
+    }
+
+    public boolean isMainArm(Arm arm) {
+        return mc.player != null && mc.player.getMainArm() == arm;
     }
 }
