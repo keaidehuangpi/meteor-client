@@ -112,6 +112,7 @@
     "HeadFeatureRendererMixin",
     "HeldItemFeatureRendererMixin",
     "HeldItemRendererMixin",
+    "HeldItemRendererBlockingMixin",
     "HungerManagerMixin",
     "InGameHudMixin",
     "InGameOverlayRendererMixin",

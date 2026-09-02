@@ -33,7 +33,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Objects;
@@ -44,9 +43,6 @@ import static meteordevelopment.meteorclient.MeteorClient.mc;
 public abstract class HeldItemRendererMixin {
     @Unique
     private Hand meteor$renderHand;
-
-    @Unique
-    private ItemStack meteor$renderItem;
 
     @Shadow
     private float equipProgressMainHand;
@@ -62,12 +58,6 @@ public abstract class HeldItemRendererMixin {
 
     @Shadow
     protected abstract boolean shouldSkipHandAnimationOnSwap(ItemStack from, ItemStack to);
-
-    @Shadow
-    protected abstract void swingArm(float swingProgress, MatrixStack matrices, int armX, Arm arm);
-
-    @Shadow
-    protected abstract void applySwingOffset(MatrixStack matrices, Arm arm, float swingProgress);
 
     @ModifyExpressionValue(method = "renderItem(FLnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/command/OrderedRenderCommandQueue;Lnet/minecraft/client/network/ClientPlayerEntity;I)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/network/ClientPlayerEntity;getHandSwingProgress(F)F"))
     private float modifySwing(float swingProgress) {
@@ -120,21 +110,9 @@ public abstract class HeldItemRendererMixin {
         MeteorClient.EVENT_BUS.post(HeldItemRendererEvent.get(hand, matrices));
     }
 
-    @Redirect(method = "renderFirstPersonItem", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/item/HeldItemRenderer;swingArm(FLnet/minecraft/client/util/math/MatrixStack;ILnet/minecraft/util/Arm;)V"))
-    private void blockingAttackAnimation(HeldItemRenderer instance, float swingProgress, MatrixStack matrices, int armX, Arm arm) {
-        AutoShield autoShield = Modules.get().get(AutoShield.class);
-        if (autoShield != null && autoShield.shouldAnimateSwordBlock(meteor$renderItem) && meteor$renderHand == Hand.MAIN_HAND) {
-            applySwingOffset(matrices, arm, swingProgress);
-        }
-        else {
-            swingArm(swingProgress, matrices, armX, arm);
-        }
-    }
-
     @Inject(method = "renderFirstPersonItem", at = @At("HEAD"))
     private void setRenderHand(AbstractClientPlayerEntity player, float tickProgress, float pitch, Hand hand, float swingProgress, ItemStack item, float equipProgress, MatrixStack matrices, OrderedRenderCommandQueue orderedRenderCommandQueue, int light, CallbackInfo ci) {
         meteor$renderHand = hand;
-        meteor$renderItem = item;
     }
 
     // Offhand shields make vanilla lower the main-hand equip height. Keep the sword's attack progress,
